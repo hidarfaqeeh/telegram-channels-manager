@@ -10,7 +10,7 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-class Database:
+class DatabaseManager:
     def __init__(self, database_url: str):
         self.database_url = database_url
         self.engine = None
@@ -18,6 +18,10 @@ class Database:
         self.SessionLocal = None
         self.AsyncSessionLocal = None
         
+    async def initialize(self):
+        """Initialize database connection and create tables"""
+        return await self.init_db()
+    
     async def init_db(self):
         """Initialize database connection and create tables"""
         try:
@@ -463,3 +467,6 @@ class Database:
             await self.async_engine.dispose()
         if self.engine:
             self.engine.dispose()
+
+# Alias for backward compatibility
+Database = DatabaseManager
