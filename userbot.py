@@ -16,7 +16,7 @@ import json
 
 # Import local modules
 import config
-from database import Database
+from database.database import DatabaseManager
 from filters.message_filters import MessageFilterManager
 from formatters.text_formatter import TextFormatter
 from utils.helpers import is_admin, format_duration, split_message, get_entity_info
@@ -48,7 +48,7 @@ class TelegramUserBot:
         )
         
         # Initialize database
-        self.db = Database(config.DATABASE_URL)
+        self.db = DatabaseManager(config.DATABASE_URL)
         
         # Initialize managers
         self.filter_manager = None
@@ -84,12 +84,12 @@ class TelegramUserBot:
             # Initialize managers
             self.filter_manager = MessageFilterManager(self.db)
             self.text_formatter = TextFormatter(self.db)
-            self.channel_manager = ChannelManager(self.db, self.client)
-            self.invite_manager = InviteManager(self.db, self.client)
-            self.admin_manager = AdminManager(self.db, self.client)
-            self.post_scheduler = PostScheduler(self.db, self.client)
-            self.auto_accept_manager = AutoAcceptManager(self.db, self.client)
-            self.translation_manager = TranslationManager(self.db)
+            self.channel_manager = ChannelManager(self.client, self.db)
+            self.invite_manager = InviteManager(self.client, self.db)
+            self.admin_manager = AdminManager(self.client, self.db)
+            self.post_scheduler = PostScheduler(self.client, self.db)
+            self.auto_accept_manager = AutoAcceptManager(self.client, self.db)
+            self.translation_manager = TranslationManager()
             
             # Connect to Telegram
             await self.client.start(phone=config.PHONE_NUMBER)
