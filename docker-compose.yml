@@ -1,0 +1,253 @@
+version: '3.8'
+
+services:
+  # Main Telegram Bot Application
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram-channels-bot
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      - PYTHONPATH=/app
+      - TZ=Asia/Riyadh
+      
+    # Mount volumes for persistent data
+    volumes:
+      - bot_data:/app/data
+      - bot_logs:/app/logs
+      - bot_sessions:/app/sessions
+      - bot_media:/app/media
+      - ./config:/app/config:ro  # Mount config as read-only
+      - ./.env:/app/.env:ro      # Mount environment file
+    
+    # Port mapping (if web interface is added later)
+    ports:
+      - "8080:8080"
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python3", "/app/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    # Dependencies
+    depends_on:
+      redis:
+        condition: service_healthy
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Network
+    networks:
+      - bot-network
+
+  # Redis for caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: telegram-bot-redis
+    restart: unless-stopped
+    
+    # Redis configuration
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 128mb
+      --maxmemory-policy allkeys-lru
+    
+    # Mount volume for Redis data
+    volumes:
+      - redis_data:/data
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.2'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    
+    # Network
+    networks:
+      - bot-network
+
+  # Optional: Nginx proxy for web interface
+  nginx:
+    image: nginx:alpine
+    container_name: telegram-bot-nginx
+    restart: unless-stopped
+    
+    # Port mapping
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    # Nginx configuration
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - nginx_logs:/var/log/nginx
+    
+    # Dependencies
+    depends_on:
+      - telegram-bot
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: '0.1'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    
+    # Network
+    networks:
+      - bot-network
+    
+    # Only start if nginx config exists
+    profiles:
+      - web
+
+  # Optional: Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: telegram-bot-prometheus
+    restart: unless-stopped
+    
+    # Prometheus configuration
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    
+    # Port mapping
+    ports:
+      - "9090:9090"
+    
+    # Command
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    
+    # Network
+    networks:
+      - bot-network
+    
+    # Only start if monitoring is needed
+    profiles:
+      - monitoring
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: telegram-bot-grafana
+    restart: unless-stopped
+    
+    # Environment variables
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    
+    # Grafana data
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    # Port mapping
+    ports:
+      - "3000:3000"
+    
+    # Dependencies
+    depends_on:
+      - prometheus
+    
+    # Network
+    networks:
+      - bot-network
+    
+    # Only start if monitoring is needed
+    profiles:
+      - monitoring
+
+# Volumes for persistent data
+volumes:
+  bot_data:
+    name: telegram-bot-data
+    driver: local
+  
+  bot_logs:
+    name: telegram-bot-logs
+    driver: local
+  
+  bot_sessions:
+    name: telegram-bot-sessions
+    driver: local
+  
+  bot_media:
+    name: telegram-bot-media
+    driver: local
+  
+  redis_data:
+    name: telegram-bot-redis
+    driver: local
+  
+  nginx_logs:
+    name: telegram-bot-nginx-logs
+    driver: local
+  
+  prometheus_data:
+    name: telegram-bot-prometheus
+    driver: local
+  
+  grafana_data:
+    name: telegram-bot-grafana
+    driver: local
+
+# Network configuration
+networks:
+  bot-network:
+    name: telegram-bot-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
