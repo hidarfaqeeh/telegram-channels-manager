@@ -41,8 +41,8 @@ class ChannelManager:
     def __init__(self, client: TelegramClient, db: DatabaseManager):
         self.client = client
         self.db = db
-        self.filter_manager = MessageFilterManager()
-        self.text_formatter = TextFormatter()
+        self.filter_manager = MessageFilterManager(db)
+        self.text_formatter = TextFormatter(db)
         self.managed_channels: Dict[int, Dict] = {}
         self.channel_stats: Dict[int, Dict] = {}
         
