@@ -6,6 +6,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from telethon import TelegramClient
+from telethon.tl import functions
 from telethon.tl.types import ChatInviteExported
 from telethon.errors import FloodWaitError, ChatAdminRequiredError
 
@@ -35,7 +36,6 @@ class InviteManager:
             )
             
             if isinstance(invite, ChatInviteExported):
-                # Save to database
                 await self.db.create_invite_link(
                     channel_id=channel_id,
                     link_name=link_name,
@@ -82,37 +82,7 @@ class InviteManager:
     async def get_channel_invite_links(self, channel_id: int) -> List[Dict[str, Any]]:
         """Get all invite links for a channel"""
         try:
-            entity = await self.client.get_entity(channel_id)
-            
-            # Get exported invite links
-            invites = await self.client(
-                functions.messages.GetExportedChatInvitesRequest(
-                    peer=entity,
-                    admin_id=await self.client.get_me(),
-                    offset_date=None,
-                    offset_link='',
-                    limit=100
-                )
-            )
-            
-            invite_links = []
-            for invite in invites.invites:
-                if isinstance(invite, ChatInviteExported):
-                    invite_links.append({
-                        'link': invite.link,
-                        'admin_id': invite.admin_id,
-                        'date': invite.date,
-                        'start_date': getattr(invite, 'start_date', None),
-                        'expire_date': getattr(invite, 'expire_date', None),
-                        'usage_limit': getattr(invite, 'usage_limit', None),
-                        'usage': getattr(invite, 'usage', 0),
-                        'request_needed': getattr(invite, 'request_needed', False),
-                        'permanent': getattr(invite, 'permanent', False),
-                        'revoked': getattr(invite, 'revoked', False)
-                    })
-            
-            return invite_links
-            
+            return await self.db.get_invite_links(channel_id)
         except Exception as e:
             logger.error(f"Error getting invite links for channel {channel_id}: {e}")
             return []
