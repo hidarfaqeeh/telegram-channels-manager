@@ -346,7 +346,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n💥 خطأ في الإعداد: {e}")
         sys.exit(1)
-=======
 import subprocess
 import logging
 from pathlib import Path
